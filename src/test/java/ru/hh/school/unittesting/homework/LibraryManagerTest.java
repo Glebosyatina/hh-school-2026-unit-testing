@@ -1,75 +1,107 @@
 package ru.hh.school.unittesting.homework;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 
 class LibraryManagerTest{
 
-  //реализация сервиса уведомлений с одним методом который просто вывод id юзера и сообщение
-  class NotificationServiceImpl implements NotificationService{
-    public void notifyUser(String userId, String message){
-      System.out.println("User: "+userId+"\tMessage: "+message);
-    }
-  };
-  //реализация юзер сервиса в котором один метод, проверяющий активен ли пользователь
-  class UserServiceImpl implements UserService{
-    public boolean isUserActive(String userId){
-      return true;
-    }
-  }
+  private NotificationService notificationService;
+  private UserService userService;
 
-  NotificationService notificationService = new NotificationServiceImpl();
-  UserService userService = new UserServiceImpl();
+  private LibraryManager libManager;
+
+  @BeforeEach
+  void setUp() {
+    //мокаем поля сервисов, дефолтная реализация методов интерфейса будет возвращать дефолтные значения 0, false, null
+    //можно через аннотации @Mock, @InjectMocks, @ExtendWith(MockitoExtension.class) , но мне захотелось явно вызвать
+    notificationService = mock(NotificationService.class);
+    userService = mock(UserService.class);
+    libManager = new LibraryManager(notificationService, userService);
+  }
 
   @Test
-  void addingBooks(){
-    LibraryManager libManager = new LibraryManager(notificationService, userService);
-
-    //добавили 10 книг, проверяем что корректно работает уменьшение при взятии книги
-    libManager.addBook("978-5-699-12014-7", 10);
-
-    for (int i = 0; i < 10; i++) {
-      assertTrue(libManager.borrowBook("978-5-699-12014-7", "8be4df61−93ca−11d2−aa0d−00e098032b8c"));
-    }
-    assertFalse(libManager.borrowBook("978-5-699-12014-7", "8be4df61−93ca−11d2−aa0d−00e098032b8c"));
+  void addingBooks() {
+    //проверяем что корректно работает уменьшение при взятии книги
+    libManager.addBook("The Grapes of Wrath", 1);
+    //меняем реализацию по умолчанию
+    when(userService.isUserActive(any())).thenReturn(true);
+    assertTrue(libManager.borrowBook("The Grapes of Wrath", "user1"));
+    assertFalse(libManager.borrowBook("The Grapes of Wrath", "user2"));
   }
 
-  @ParameterizedTest @ValueSource(ints = {0, 10, 20, 30, 100})
-  void getBooks(int numBooks){
-    LibraryManager libManager = new LibraryManager(notificationService, userService);
-
+  @Test
+  void getBooks() {
     //добавили n книг, проверяем что корректно работает получение колва книг
-    libManager.addBook("978-5-699-12014-7", numBooks);
-    assertEquals(numBooks, libManager.getAvailableCopies("978-5-699-12014-7"));
+    libManager.addBook("The Devils", 10);
+    assertEquals(10, libManager.getAvailableCopies("The Devils"));
   }
 
   @Test
-  void returnBooks(){
-    LibraryManager libManager = new LibraryManager(notificationService, userService);
+  void borrowBookByNonActiveUser(){
+    libManager.addBook("Either/Or Kierkegaard", 1);
+    assertFalse(libManager.borrowBook("Either/Or Kierkegaard", "user1"));
+  }
 
+  @Test
+  void returnBooks() {
     //проверяем возврат взятых книг
-    libManager.addBook("978-5-699-12014-7", 1);
+    libManager.addBook("Les Mémoires du Diable", 1);
 
     //взяли книгу
-    libManager.borrowBook("978-5-699-12014-7", "8be4df61−93ca−11d2−aa0d−00e098032b8c");
-    assertEquals(0, libManager.getAvailableCopies("978-5-699-12014-7"));
+    //изменили дефолтную реализацию, иначе не получится взять книгу
+    when(userService.isUserActive(any())).thenReturn(true);
+    libManager.borrowBook("Les Mémoires du Diable", "user1");
+    assertEquals(0, libManager.getAvailableCopies("Les Mémoires du Diable"));
 
     //вернули книгу
-    assertTrue(libManager.returnBook("978-5-699-12014-7", "8be4df61−93ca−11d2−aa0d−00e098032b8c"));
-    assertEquals(1, libManager.getAvailableCopies("978-5-699-12014-7"));
+    assertTrue(libManager.returnBook("Les Mémoires du Diable", "user1"));
+    assertEquals(1, libManager.getAvailableCopies("Les Mémoires du Diable"));
   }
 
   @Test
-  void calculateDiscount(){
-    LibraryManager libManager = new LibraryManager(notificationService, userService);
+  void returnNonExistBook(){
+    libManager.addBook("Madame Bovary", 1);
+    assertFalse(libManager.returnBook("Salambo", "user1"));
 
-    assertEquals(6.0, libManager.calculateDynamicLateFee(10,true,true));
-    assertEquals(0.5, libManager.calculateDynamicLateFee(1, false, false));
-    assertEquals(75.0 ,libManager.calculateDynamicLateFee(100, true, false));
-    assertEquals(40.0 ,libManager.calculateDynamicLateFee(100, false, true));
   }
 
+  @Test
+  void returnWrongUser(){
+    libManager.addBook("Madame Bovary", 1);
+    when(userService.isUserActive(any())).thenReturn(true);
+    libManager.borrowBook("Madame Bovary", "user1");
+    assertFalse(libManager.returnBook("Madame Bovary", "user2"));
+  }
+
+
+  @Test
+  void thownException(){
+    //проверяем что кидает Exception, передав лямбду
+    assertThrows(IllegalArgumentException.class, () -> libManager.calculateDynamicLateFee(-1, true, true));
+  }
+
+  //выносим тестовые данные и ожидаемые результаты в CsvSource и принимаем через параметры
+  @ParameterizedTest
+  @CsvSource({
+      "6.0, 10, true, true",
+      "0.5, 1, false, false",
+      "75.0, 100, true, false",
+      "40.0, 100, false, true"
+  })
+  void calculateDiscount(
+      double expected,
+      int overdueDays,
+      boolean isBestseller,
+      boolean isPremiumMember
+  ) {
+    assertEquals(expected, libManager.calculateDynamicLateFee(overdueDays,isBestseller,isPremiumMember));
+  }
 }
