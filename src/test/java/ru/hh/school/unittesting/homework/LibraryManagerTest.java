@@ -4,11 +4,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.Mockito;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 
 class LibraryManagerTest{
@@ -35,6 +35,11 @@ class LibraryManagerTest{
     when(userService.isUserActive(any())).thenReturn(true);
     assertTrue(libManager.borrowBook("The Grapes of Wrath", "user1"));
     assertFalse(libManager.borrowBook("The Grapes of Wrath", "user2"));
+
+    //проверка вызова сервисов userService, notificationService
+    verify(userService, times(2)).isUserActive(any());
+    verify(notificationService, times(1)).notifyUser(any(), any());
+
   }
 
   @Test
@@ -42,10 +47,12 @@ class LibraryManagerTest{
     //добавили n книг, проверяем что корректно работает получение колва книг
     libManager.addBook("The Devils", 10);
     assertEquals(10, libManager.getAvailableCopies("The Devils"));
+    //проверка что замоканные сервисы не использовались
+    verifyNoInteractions(userService, notificationService);
   }
 
   @Test
-  void borrowBookByNonActiveUser(){
+  void borrowBookByNonActiveUser() {
     libManager.addBook("Either/Or Kierkegaard", 1);
     assertFalse(libManager.borrowBook("Either/Or Kierkegaard", "user1"));
   }
@@ -67,14 +74,13 @@ class LibraryManagerTest{
   }
 
   @Test
-  void returnNonExistBook(){
+  void returnNonExistBook() {
     libManager.addBook("Madame Bovary", 1);
     assertFalse(libManager.returnBook("Salambo", "user1"));
-
   }
 
   @Test
-  void returnWrongUser(){
+  void returnWrongUser() {
     libManager.addBook("Madame Bovary", 1);
     when(userService.isUserActive(any())).thenReturn(true);
     libManager.borrowBook("Madame Bovary", "user1");
@@ -83,7 +89,7 @@ class LibraryManagerTest{
 
 
   @Test
-  void thownException(){
+  void thrownException() {
     //проверяем что кидает Exception, передав лямбду
     assertThrows(IllegalArgumentException.class, () -> libManager.calculateDynamicLateFee(-1, true, true));
   }
@@ -102,6 +108,7 @@ class LibraryManagerTest{
       boolean isBestseller,
       boolean isPremiumMember
   ) {
+    assertTrue(overdueDays > 0); //если вдруг кто то случайно изменит условие, да и если кто то изменит условие упадет предыдущий тест в котором проверка на выброс исключения
     assertEquals(expected, libManager.calculateDynamicLateFee(overdueDays,isBestseller,isPremiumMember));
   }
 }
