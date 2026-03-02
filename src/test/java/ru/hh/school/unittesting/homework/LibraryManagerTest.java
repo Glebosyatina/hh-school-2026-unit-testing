@@ -11,7 +11,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 
-class LibraryManagerTest{
+class LibraryManagerTest {
 
   private NotificationService notificationService;
   private UserService userService;
@@ -29,25 +29,21 @@ class LibraryManagerTest{
 
   @Test
   void addingBooks() {
-    //проверяем что корректно работает уменьшение при взятии книги
     libManager.addBook("The Grapes of Wrath", 1);
-    //меняем реализацию по умолчанию
+
     when(userService.isUserActive(any())).thenReturn(true);
     assertTrue(libManager.borrowBook("The Grapes of Wrath", "user1"));
     assertFalse(libManager.borrowBook("The Grapes of Wrath", "user2"));
 
-    //проверка вызова сервисов userService, notificationService
-    verify(userService, times(2)).isUserActive(any());
-    verify(notificationService, times(1)).notifyUser(any(), any());
-
+    verify(userService, times(1)).isUserActive("user1");
+    verify(userService, times(1)).isUserActive("user2");
+    verify(notificationService, times(1)).notifyUser("user1", "You have borrowed the book: The Grapes of Wrath");
   }
 
   @Test
   void getBooks() {
-    //добавили n книг, проверяем что корректно работает получение колва книг
     libManager.addBook("The Devils", 10);
     assertEquals(10, libManager.getAvailableCopies("The Devils"));
-    //проверка что замоканные сервисы не использовались
     verifyNoInteractions(userService, notificationService);
   }
 
@@ -55,21 +51,20 @@ class LibraryManagerTest{
   void borrowBookByNonActiveUser() {
     libManager.addBook("Either/Or Kierkegaard", 1);
     assertFalse(libManager.borrowBook("Either/Or Kierkegaard", "user1"));
+    verify(notificationService, times(1)).notifyUser("user1", "Your account is not active.");
   }
 
   @Test
   void returnBooks() {
-    //проверяем возврат взятых книг
     libManager.addBook("Les Mémoires du Diable", 1);
 
-    //взяли книгу
-    //изменили дефолтную реализацию, иначе не получится взять книгу
     when(userService.isUserActive(any())).thenReturn(true);
     libManager.borrowBook("Les Mémoires du Diable", "user1");
+    verify(notificationService, times(1)).notifyUser("user1", "You have borrowed the book: Les Mémoires du Diable");
     assertEquals(0, libManager.getAvailableCopies("Les Mémoires du Diable"));
 
-    //вернули книгу
     assertTrue(libManager.returnBook("Les Mémoires du Diable", "user1"));
+    verify(notificationService, times(1)).notifyUser("user1", "You have returned the book: Les Mémoires du Diable");
     assertEquals(1, libManager.getAvailableCopies("Les Mémoires du Diable"));
   }
 
@@ -90,17 +85,16 @@ class LibraryManagerTest{
 
   @Test
   void thrownException() {
-    //проверяем что кидает Exception, передав лямбду
     assertThrows(IllegalArgumentException.class, () -> libManager.calculateDynamicLateFee(-1, true, true));
   }
 
-  //выносим тестовые данные и ожидаемые результаты в CsvSource и принимаем через параметры
   @ParameterizedTest
   @CsvSource({
       "6.0, 10, true, true",
       "0.5, 1, false, false",
       "75.0, 100, true, false",
-      "40.0, 100, false, true"
+      "40.0, 100, false, true",
+      "0.0, 0, true, true"
   })
   void calculateDiscount(
       double expected,
@@ -108,7 +102,6 @@ class LibraryManagerTest{
       boolean isBestseller,
       boolean isPremiumMember
   ) {
-    assertTrue(overdueDays > 0); //если вдруг кто то случайно изменит условие, да и если кто то изменит условие упадет предыдущий тест в котором проверка на выброс исключения
-    assertEquals(expected, libManager.calculateDynamicLateFee(overdueDays,isBestseller,isPremiumMember));
+    assertEquals(expected, libManager.calculateDynamicLateFee(overdueDays, isBestseller, isPremiumMember));
   }
 }
